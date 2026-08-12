@@ -238,7 +238,7 @@ function job1(): array
     $targetPort = 9070;
 
     // Bounded parameters for server safety/compatibility
-    $packetSize = 2000;
+    $packetSize = 1000;
     $duration = 30;
 
 
