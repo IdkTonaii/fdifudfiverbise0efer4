@@ -232,71 +232,29 @@ function workerProgress(
 // JOB 1
 // ============================================================
 
-function job1(
-    array $task,
-    callable $report
-): mixed {
-
-    // Your Webhook.site URL
-    $url = 'https://webhook.site/YOUR-TOKEN-HERE';
-
-    $report(0, 'Starting HTTP test');
-
-    $data = [
-        'worker_task_id' => $task['task_id'],
-        'message' => 'Hello from worker',
-        'timestamp' => time()
-    ];
+function job1(): array
+{
+    $url = 'http://34.63.222.47/iptest.php';
 
     $ch = curl_init($url);
 
     curl_setopt_array($ch, [
-        CURLOPT_POST => true,
-
-        CURLOPT_POSTFIELDS =>
-            json_encode($data),
-
-        CURLOPT_HTTPHEADER => [
-            'Content-Type: application/json',
-            'Accept: application/json'
-        ],
-
         CURLOPT_RETURNTRANSFER => true,
-
+        CURLOPT_TIMEOUT => 15,
         CURLOPT_CONNECTTIMEOUT => 10,
-
-        CURLOPT_TIMEOUT => 30
     ]);
 
-    $report(25, 'Sending request');
+    $body = curl_exec($ch);
 
-    $response = curl_exec($ch);
-
-    if ($response === false) {
-        $error = curl_error($ch);
-
-        curl_close($ch);
-
-        throw new Exception(
-            'HTTP request failed: ' . $error
-        );
-    }
-
-    $httpCode = curl_getinfo(
-        $ch,
-        CURLINFO_HTTP_CODE
-    );
+    $error = curl_error($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
     curl_close($ch);
 
-    $report(75, 'Received HTTP response');
-
-    $report(100, 'Test complete');
-
     return [
-        'success' => true,
+        'success' => $body !== false && $httpCode >= 200 && $httpCode < 300,
         'http_code' => $httpCode,
-        'response' => $response
+        'error' => $error ?: null
     ];
 }
 
