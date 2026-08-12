@@ -29,16 +29,23 @@ jobs:
       - name: Download worker code
         uses: actions/checkout@v6
 
-      - name: Check PHP
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install Python dependencies
         run: |
-          echo "===== PHP VERSION ====="
-          php --version
+          python -m pip install --upgrade pip
+          pip install requests
 
-          echo "===== CURL ====="
-          php -r 'var_dump(function_exists("curl_init"));'
+      - name: Check Python
+        run: |
+          echo "===== PYTHON VERSION ====="
+          python --version
 
-          echo "===== SOCKETS ====="
-          php -r 'var_dump(function_exists("socket_create"));'
+          echo "===== REQUESTS VERSION ====="
+          python -c "import requests; print(requests.__version__)"
 
       - name: Test VPS connection
         run: |
@@ -55,10 +62,6 @@ jobs:
         run: |
           echo "===== STARTING WORKER ${{ matrix.id }} ====="
 
-          php \
-            -d display_errors=1 \
-            -d display_startup_errors=1 \
-            -d error_reporting=E_ALL \
-            worker.php
+          python worker.py
 
           echo "===== WORKER EXITED ====="
