@@ -1,0 +1,40 @@
+name: Start 20 Workers
+
+on:
+  workflow_dispatch:
+
+jobs:
+  worker:
+    name: Worker ${{ matrix.id }}
+
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+
+      matrix:
+        id: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+             11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Show worker information
+        run: |
+          echo "================================"
+          echo "WORKER ${{ matrix.id }}"
+          echo "================================"
+          echo "Hostname:"
+          hostname
+          echo
+          echo "OS:"
+          uname -a
+          echo
+          echo "CPU:"
+          nproc
+          echo
+          echo "Memory:"
+          free -h
+          echo
+          echo "Public IP:"
+          curl -s https://api.ipify.org
+          echo
