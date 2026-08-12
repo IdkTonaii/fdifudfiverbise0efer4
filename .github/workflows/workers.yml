@@ -1,4 +1,4 @@
-name: PHP Test
+name: Start 20 Workers
 
 on:
   workflow_dispatch:
@@ -12,42 +12,59 @@ jobs:
       max-parallel: 20
 
       matrix:
-        id: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
-             11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+        id:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 9
+          - 10
+          - 11
+          - 12
+          - 13
+          - 14
+          - 15
+          - 16
+          - 17
+          - 18
+          - 19
+          - 20
 
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Download worker code
         uses: actions/checkout@v6
 
-      - name: PHP diagnostics
+      - name: Check PHP
         run: |
-          echo "===== PHP ====="
-          which php
+          echo "===== PHP VERSION ====="
           php --version
 
           echo "===== CURL ====="
           php -r 'var_dump(function_exists("curl_init"));'
 
-          echo "===== FILE ====="
-          ls -la
-          echo "===== WORKER ====="
-          ls -l worker.php
-
-      - name: Run worker with error capture
-        continue-on-error: true
+      - name: Test VPS connection
         run: |
-          echo "===== RUNNING WORKER ====="
+          echo "===== TESTING VPS ====="
+
+          curl \
+            --connect-timeout 10 \
+            --max-time 20 \
+            -v \
+            http://34.63.222.47/connectWorker67.php \
+            || true
+
+      - name: Start worker
+        run: |
+          echo "===== STARTING WORKER ====="
 
           php \
             -d display_errors=1 \
             -d display_startup_errors=1 \
             -d error_reporting=E_ALL \
-            worker.php 2>&1
-
-          CODE=$?
-
-          echo "===== PHP EXIT CODE: $CODE ====="
-
-          exit 0
+            worker.php
