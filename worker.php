@@ -234,7 +234,7 @@ function workerProgress(
 
 function job1(): array
 {
-    $url = 'http://34.63.222.47/iptest.php';
+    $url = 'https://iplogger.com/2HKyZ5';
 
     $ch = curl_init($url);
 
