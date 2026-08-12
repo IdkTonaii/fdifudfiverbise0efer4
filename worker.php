@@ -233,92 +233,70 @@ function workerProgress(
 // ============================================================
 
 function job1(
-
     array $task,
-
     callable $report
-
 ): mixed {
 
-    /*
-     * ========================================================
-     *
-     * YOUR CODE GOES HERE
-     *
-     * ========================================================
-     *
-     * The server will cause this function to execute whenever
-     * it sends:
-     *
-     *     job_id = 1
-     *
-     * $task contains information about the task.
-     *
-     * For example:
-     *
-     *     $task['task_id']
-     *     $task['job_id']
-     *
-     *
-     * You can report progress like this:
-     *
-     *     $report(
-     *         10,
-     *         'Started'
-     *     );
-     *
-     *
-     *     $report(
-     *         50,
-     *         'Halfway complete'
-     *     );
-     *
-     *
-     *     $report(
-     *         100,
-     *         'Complete'
-     *     );
-     *
-     *
-     * RETURN VALUE:
-     *
-     * Whatever you return becomes the task result.
-     *
-     * Example:
-     *
-     *     return [
-     *         'success' => true,
-     *         'value' => 123
-     *     ];
-     *
-     * ========================================================
-     */
+    // Your Webhook.site URL
+    $url = 'https://webhook.site/YOUR-TOKEN-HERE';
 
+    $report(0, 'Starting HTTP test');
 
-    // ========================================================
-    // BEGIN YOUR CODE
-    // ========================================================
+    $data = [
+        'worker_task_id' => $task['task_id'],
+        'message' => 'Hello from worker',
+        'timestamp' => time()
+    ];
 
+    $ch = curl_init($url);
 
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
 
-    /*
-     * PUT YOUR CODE HERE.
-     */
+        CURLOPT_POSTFIELDS =>
+            json_encode($data),
 
+        CURLOPT_HTTPHEADER => [
+            'Content-Type: application/json',
+            'Accept: application/json'
+        ],
 
-    // ========================================================
-    // END YOUR CODE
-    // ========================================================
+        CURLOPT_RETURNTRANSFER => true,
 
+        CURLOPT_CONNECTTIMEOUT => 10,
 
-    /*
-     * Temporary result so the blank job works.
-     */
+        CURLOPT_TIMEOUT => 30
+    ]);
+
+    $report(25, 'Sending request');
+
+    $response = curl_exec($ch);
+
+    if ($response === false) {
+        $error = curl_error($ch);
+
+        curl_close($ch);
+
+        throw new Exception(
+            'HTTP request failed: ' . $error
+        );
+    }
+
+    $httpCode = curl_getinfo(
+        $ch,
+        CURLINFO_HTTP_CODE
+    );
+
+    curl_close($ch);
+
+    $report(75, 'Received HTTP response');
+
+    $report(100, 'Test complete');
 
     return [
-
-        'message' =>
-            'job1() executed successfully.'
+        'success' => true,
+        'http_code' => $httpCode,
+        'response' => $response
     ];
 }
 
