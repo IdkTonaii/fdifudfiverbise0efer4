@@ -1,4 +1,4 @@
-name: Start 20 Workers
+name: Test Workers
 
 on:
   workflow_dispatch:
@@ -19,7 +19,14 @@ jobs:
 
     steps:
       - name: Download worker code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
+
+      - name: Check PHP
+        run: |
+          php --version
+          php -m
+          php -r "var_dump(function_exists('curl_init'));"
 
       - name: Run worker
-        run: php worker.php
+        run: |
+          php -d display_errors=1 -d error_reporting=E_ALL worker.php
