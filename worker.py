@@ -8,11 +8,12 @@ import traceback
 # CONFIGURATION
 # ============================================================
 
-SERVER_URL = "https://YOUR-DOMAIN.COM/connectWorker67.php"
+SERVER_URL = "http://34.63.222.47/connectWorker67.php"
 
 POLL_INTERVAL = 5
 HEARTBEAT_INTERVAL = 30
 REQUEST_TIMEOUT = 15
+RECONNECT_DELAY = 5
 
 
 # ============================================================
@@ -34,6 +35,8 @@ class Worker:
             target=self.heartbeat_loop,
             daemon=True
         )
+
+        self.lock = threading.Lock()
 
 
     # ========================================================
@@ -62,20 +65,50 @@ class Worker:
 
                     print(
                         "Registration failed:",
-                        data.get("error", "Unknown error")
+                        data.get(
+                            "error",
+                            "Unknown error"
+                        )
                     )
 
-                    time.sleep(5)
+                    time.sleep(
+                        RECONNECT_DELAY
+                    )
+
                     continue
 
 
-                self.worker_id = data["worker_id"]
-                self.worker_token = data["worker_token"]
+                worker_id = data.get(
+                    "worker_id"
+                )
+
+                worker_token = data.get(
+                    "worker_token"
+                )
+
+
+                if not worker_id or not worker_token:
+
+                    print(
+                        "Registration response is missing credentials."
+                    )
+
+                    time.sleep(
+                        RECONNECT_DELAY
+                    )
+
+                    continue
+
+
+                with self.lock:
+
+                    self.worker_id = worker_id
+                    self.worker_token = worker_token
 
 
                 print()
                 print("Worker registered")
-                print("Worker ID:", self.worker_id)
+                print("Worker ID:", worker_id)
 
 
                 return True
@@ -88,11 +121,13 @@ class Worker:
                     e
                 )
 
+
             except ValueError:
 
                 print(
                     "Server returned invalid JSON during registration."
                 )
+
 
             except Exception as e:
 
@@ -101,11 +136,27 @@ class Worker:
                     e
                 )
 
+                traceback.print_exc()
 
-            time.sleep(5)
+
+            time.sleep(
+                RECONNECT_DELAY
+            )
 
 
         return False
+
+
+    # ========================================================
+    # CLEAR CREDENTIALS
+    # ========================================================
+
+    def clear_credentials(self):
+
+        with self.lock:
+
+            self.worker_id = None
+            self.worker_token = None
 
 
     # ========================================================
@@ -114,15 +165,28 @@ class Worker:
 
     def request(self, data):
 
-        data["worker_id"] = self.worker_id
-        data["worker_token"] = self.worker_token
+        with self.lock:
+
+            worker_id = self.worker_id
+            worker_token = self.worker_token
+
+
+        if not worker_id or not worker_token:
+
+            return None
+
+
+        request_data = dict(data)
+
+        request_data["worker_id"] = worker_id
+        request_data["worker_token"] = worker_token
 
 
         try:
 
             response = self.session.post(
                 SERVER_URL,
-                json=data,
+                json=request_data,
                 timeout=REQUEST_TIMEOUT
             )
 
@@ -143,15 +207,15 @@ class Worker:
                 "Worker authentication expired."
             )
 
-            self.worker_id = None
-            self.worker_token = None
+            self.clear_credentials()
 
             return None
 
 
         try:
 
-            return response.json()
+            data = response.json()
+
 
         except ValueError:
 
@@ -162,22 +226,30 @@ class Worker:
             return None
 
 
+        return data
+
+
     # ========================================================
     # HEARTBEAT
     # ========================================================
 
     def heartbeat(self):
 
-        if not self.worker_id or not self.worker_token:
+        if not self.worker_id:
+
             return False
 
 
         data = self.request({
-            "action": "heartbeat"
+
+            "action":
+                "heartbeat"
+
         })
 
 
         if data is None:
+
             return False
 
 
@@ -185,7 +257,10 @@ class Worker:
 
             print(
                 "Heartbeat failed:",
-                data.get("error", "Unknown error")
+                data.get(
+                    "error",
+                    "Unknown error"
+                )
             )
 
             return False
@@ -208,14 +283,25 @@ class Worker:
 
 
             if not self.running:
+
                 break
 
 
             if not self.worker_id:
+
                 continue
 
 
-            self.heartbeat()
+            try:
+
+                self.heartbeat()
+
+            except Exception as e:
+
+                print(
+                    "Heartbeat error:",
+                    e
+                )
 
 
     # ========================================================
@@ -225,11 +311,15 @@ class Worker:
     def poll(self):
 
         data = self.request({
-            "action": "poll"
+
+            "action":
+                "poll"
+
         })
 
 
         if data is None:
+
             return None
 
 
@@ -237,16 +327,22 @@ class Worker:
 
             print(
                 "Poll failed:",
-                data.get("error", "Unknown error")
+                data.get(
+                    "error",
+                    "Unknown error"
+                )
             )
 
             return None
 
 
-        task = data.get("task")
+        task = data.get(
+            "task"
+        )
 
 
         if not task:
+
             return None
 
 
@@ -266,17 +362,23 @@ class Worker:
 
         data = self.request({
 
-            "action": "progress",
+            "action":
+                "progress",
 
-            "task_id": task_id,
+            "task_id":
+                task_id,
 
-            "progress": progress,
+            "progress":
+                progress,
 
-            "message": message
+            "message":
+                message
+
         })
 
 
         if data is None:
+
             return False
 
 
@@ -297,15 +399,20 @@ class Worker:
 
         data = self.request({
 
-            "action": "result",
+            "action":
+                "result",
 
-            "task_id": task_id,
+            "task_id":
+                task_id,
 
-            "result": result
+            "result":
+                result
+
         })
 
 
         if data is None:
+
             return False
 
 
@@ -313,7 +420,10 @@ class Worker:
 
             print(
                 "Result submission failed:",
-                data.get("error", "Unknown error")
+                data.get(
+                    "error",
+                    "Unknown error"
+                )
             )
 
             return False
@@ -336,26 +446,23 @@ class Worker:
         )
 
 
-        # ----------------------------------------------------
-        # PUT YOUR JOB 1 CODE HERE
-        # ----------------------------------------------------
-
         self.progress(
             task_id,
-            10,
+            0,
             "Starting job 1"
         )
 
 
-        # Example work:
+        # ====================================================
+        # PUT YOUR ACTUAL JOB 1 CODE HERE
+        # ====================================================
 
         for i in range(10):
 
             time.sleep(1)
 
             percent = (
-                (i + 1) *
-                10
+                (i + 1) * 10
             )
 
 
@@ -366,16 +473,18 @@ class Worker:
             )
 
 
-        # ----------------------------------------------------
-        # Return whatever you want saved as the result.
-        # ----------------------------------------------------
+        # ====================================================
+        # JOB RESULT
+        # ====================================================
 
         return {
 
-            "success": True,
+            "success":
+                True,
 
             "message":
                 "Job 1 completed successfully"
+
         }
 
 
@@ -444,10 +553,12 @@ class Worker:
 
                 result = {
 
-                    "success": False,
+                    "success":
+                        False,
 
                     "error":
                         f"Unknown job ID: {job_id}"
+
                 }
 
 
@@ -478,28 +589,38 @@ class Worker:
                 "JOB ERROR:"
             )
 
-            print(e)
-
+            print(
+                e
+            )
 
             traceback.print_exc()
 
 
-            # -----------------------------------------------
-            # Tell the server that the job failed.
-            # -----------------------------------------------
+            failed_result = {
 
-            self.send_result(
+                "success":
+                    False,
 
+                "error":
+                    str(e)
+
+            }
+
+
+            if self.send_result(
                 task_id,
+                failed_result
+            ):
 
-                {
+                print(
+                    "Failed-job result submitted."
+                )
 
-                    "success": False,
+            else:
 
-                    "error":
-                        str(e)
-                }
-            )
+                print(
+                    "Could not submit failed-job result."
+                )
 
 
     # ========================================================
@@ -513,20 +634,22 @@ class Worker:
         )
 
 
-        # ----------------------------------------------------
-        # Register
-        # ----------------------------------------------------
+        # ====================================================
+        # REGISTER
+        # ====================================================
 
         if not self.register():
 
             return
 
 
-        # ----------------------------------------------------
-        # Start heartbeat thread
-        # ----------------------------------------------------
+        # ====================================================
+        # START HEARTBEAT
+        # ====================================================
 
-        self.heartbeat_thread.start()
+        if not self.heartbeat_thread.is_alive():
+
+            self.heartbeat_thread.start()
 
 
         print(
@@ -534,26 +657,54 @@ class Worker:
         )
 
 
-        # ----------------------------------------------------
-        # Poll forever
-        # ----------------------------------------------------
+        # ====================================================
+        # POLL FOREVER
+        # ====================================================
 
         while self.running:
 
             try:
+
+                # ------------------------------------------------
+                # Make sure we have credentials.
+                # ------------------------------------------------
+
+                if (
+                    not self.worker_id or
+                    not self.worker_token
+                ):
+
+                    print(
+                        "Worker credentials missing."
+                    )
+
+                    print(
+                        "Re-registering..."
+                    )
+
+
+                    if not self.register():
+
+                        break
+
+
+                    continue
+
+
+                # ------------------------------------------------
+                # Poll server.
+                # ------------------------------------------------
 
                 task = self.poll()
 
 
                 # ------------------------------------------------
                 # Authentication failure.
-                #
-                # Re-register and continue.
                 # ------------------------------------------------
 
                 if (
-                    self.worker_id is None or
-                    self.worker_token is None
+                    not self.worker_id or
+                    not self.worker_token
                 ):
 
                     print(
@@ -606,12 +757,26 @@ class Worker:
                     e
                 )
 
-                time.sleep(5)
+                traceback.print_exc()
+
+
+                time.sleep(
+                    RECONNECT_DELAY
+                )
 
 
         print(
             "Worker stopped."
         )
+
+
+        try:
+
+            self.session.close()
+
+        except Exception:
+
+            pass
 
 
 # ============================================================
