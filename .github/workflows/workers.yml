@@ -18,23 +18,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Show worker information
-        run: |
-          echo "================================"
-          echo "WORKER ${{ matrix.id }}"
-          echo "================================"
-          echo "Hostname:"
-          hostname
-          echo
-          echo "OS:"
-          uname -a
-          echo
-          echo "CPU:"
-          nproc
-          echo
-          echo "Memory:"
-          free -h
-          echo
-          echo "Public IP:"
-          curl -s https://api.ipify.org
-          echo
+      - name: Download worker code
+        uses: actions/checkout@v6
+
+      - name: Run worker
+        run: php worker.php
