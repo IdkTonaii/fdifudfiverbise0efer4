@@ -3,7 +3,14 @@
 /*
  * worker.php
  *
- * Runs inside each GitHub Actions Linux runner.
+ * Runs on each GitHub Actions Linux runner.
+ *
+ * The server sends a JOB ID.
+ *
+ * The worker chooses which local function
+ * corresponds to that job ID.
+ *
+ * The server NEVER sends PHP code to execute.
  */
 
 
@@ -18,12 +25,13 @@ const POLL_DELAY = 2;
 
 
 // ============================================================
-// HTTP REQUEST
+// SERVER REQUEST
 // ============================================================
 
 function requestServer(array $data): array
 {
     $ch = curl_init(SERVER_URL);
+
 
     curl_setopt_array($ch, [
 
@@ -69,13 +77,13 @@ function requestServer(array $data): array
     curl_close($ch);
 
 
-    $data = json_decode(
+    $decoded = json_decode(
         $response,
         true
     );
 
 
-    if (!is_array($data)) {
+    if (!is_array($decoded)) {
 
         throw new Exception(
             'Server returned invalid JSON'
@@ -89,12 +97,205 @@ function requestServer(array $data): array
             'Server returned HTTP ' .
             $httpCode .
             ': ' .
-            ($data['error'] ?? 'unknown error')
+            ($decoded['error'] ?? 'unknown error')
         );
     }
 
 
-    return $data;
+    return $decoded;
+}
+
+
+// ============================================================
+// WORKER PROGRESS / HEARTBEAT
+// ============================================================
+
+function workerProgress(
+    string $workerId,
+    string $workerToken,
+    string $taskId,
+    string $status,
+    ?float $progress = null,
+    ?string $message = null
+): void {
+
+    $data = [
+
+        'action' =>
+            'progress',
+
+        'worker_id' =>
+            $workerId,
+
+        'worker_token' =>
+            $workerToken,
+
+        'task_id' =>
+            $taskId,
+
+        'status' =>
+            $status
+    ];
+
+
+    if ($progress !== null) {
+
+        $data['progress'] =
+            max(0, min(100, $progress));
+    }
+
+
+    if ($message !== null) {
+
+        $data['message'] =
+            $message;
+    }
+
+
+    requestServer($data);
+}
+
+
+// ============================================================
+// JOB 1
+// ============================================================
+
+function job1(
+    array $task,
+    callable $report
+): mixed {
+
+    /*
+     * ========================================================
+     *
+     * PUT YOUR ACTUAL CODE HERE.
+     *
+     * This function is what the worker executes when:
+     *
+     *     job_id = 1
+     *
+     * You can use:
+     *
+     *     $task
+     *
+     * to access information associated with the job.
+     *
+     *
+     * To report progress:
+     *
+     *     $report(
+     *         25,
+     *         '25 percent complete'
+     *     );
+     *
+     *     $report(
+     *         50,
+     *         'Halfway done'
+     *     );
+     *
+     *     $report(
+     *         100,
+     *         'Finished'
+     *     );
+     *
+     * ========================================================
+     */
+
+
+    // ========================================================
+    // YOUR CODE STARTS HERE
+    // ========================================================
+
+
+
+    /*
+     * Example only:
+     *
+     * $report(25, 'Started');
+     *
+     * // YOUR ACTUAL WORK
+     *
+     * $report(50, 'Halfway finished');
+     *
+     * // MORE WORK
+     *
+     * $report(100, 'Complete');
+     *
+     * return [
+     *     'message' => 'Hello from job 1'
+     * ];
+     */
+
+
+    // ========================================================
+    // YOUR CODE ENDS HERE
+    // ========================================================
+
+
+    return [
+        'message' =>
+            'Job 1 has no implementation yet.'
+    ];
+}
+
+
+// ============================================================
+// JOB DISPATCHER
+// ============================================================
+
+function executeJob(
+    int $jobId,
+    array $task,
+    string $workerId,
+    string $workerToken
+): mixed {
+
+    /*
+     * This callback lets job1() report progress.
+     */
+
+    $report = function (
+        ?float $progress = null,
+        ?string $message = null
+    ) use (
+        $workerId,
+        $workerToken,
+        $task
+    ) {
+
+        workerProgress(
+
+            $workerId,
+
+            $workerToken,
+
+            $task['task_id'],
+
+            'running',
+
+            $progress,
+
+            $message
+        );
+    };
+
+
+    switch ($jobId) {
+
+        case 1:
+
+            return job1(
+                $task,
+                $report
+            );
+
+
+        default:
+
+            throw new Exception(
+                'Unknown job ID: ' . $jobId
+            );
+    }
 }
 
 
@@ -115,6 +316,7 @@ if (
     empty($registration['worker_id']) ||
     empty($registration['worker_token'])
 ) {
+
     throw new Exception(
         'Registration failed'
     );
@@ -128,7 +330,7 @@ $workerToken =
     $registration['worker_token'];
 
 
-echo "Registered successfully.\n";
+echo "Worker registered.\n";
 
 echo "Worker ID: " .
     $workerId .
@@ -136,10 +338,10 @@ echo "Worker ID: " .
 
 
 // ============================================================
-// WORK LOOP
+// MAIN WORKER LOOP
 // ============================================================
 
-echo "Worker is now waiting for tasks...\n";
+echo "Waiting for jobs...\n";
 
 
 while (true) {
@@ -147,25 +349,29 @@ while (true) {
     try {
 
         /*
-         * Ask the VPS for a task.
+         * Ask the VPS for work.
          */
 
         $response = requestServer([
 
-            'action' => 'poll',
+            'action' =>
+                'poll',
 
-            'worker_id' => $workerId,
+            'worker_id' =>
+                $workerId,
 
-            'worker_token' => $workerToken
+            'worker_token' =>
+                $workerToken
         ]);
 
 
+        $task =
+            $response['task'] ?? null;
+
+
         /*
-         * Check whether we received a task.
+         * Nothing to do.
          */
-
-        $task = $response['task'] ?? null;
-
 
         if ($task === null) {
 
@@ -175,105 +381,173 @@ while (true) {
         }
 
 
-        echo "Received task.\n";
-
-
         $taskId =
-            $task['id'] ?? null;
+            $task['task_id'] ?? null;
+
+
+        $jobId =
+            isset($task['job_id'])
+                ? (int)$task['job_id']
+                : 0;
 
 
         if ($taskId === null) {
 
-            echo "Received malformed task.\n";
+            echo "Received invalid task.\n";
 
             continue;
         }
 
 
+        echo
+            "Received task " .
+            $taskId .
+            " (job " .
+            $jobId .
+            ")\n";
+
+
         // ====================================================
-        // TASK PROCESSING
+        // TELL SERVER WE STARTED
         // ====================================================
 
-        /*
-         * IMPORTANT:
-         *
-         * We deliberately don't execute arbitrary shell
-         * commands received from the server here.
-         *
-         * Add your own permitted task types below.
-         */
+        workerProgress(
 
-        $type =
-            $task['type'] ?? 'unknown';
+            $workerId,
+
+            $workerToken,
+
+            $taskId,
+
+            'starting',
+
+            0,
+
+            'Starting job'
+        );
 
 
-        $result = null;
+        $startedAt = microtime(true);
 
 
-        if ($type === 'example') {
+        try {
 
             /*
-             * Example task.
+             * Execute the predefined function.
              */
 
-            $value =
-                $task['data']['value'] ?? null;
+            $result =
+                executeJob(
+
+                    $jobId,
+
+                    $task,
+
+                    $workerId,
+
+                    $workerToken
+                );
 
 
-            $result = [
-                'type' => 'example',
+            $duration =
+                microtime(true) -
+                $startedAt;
 
-                'input' => $value,
 
-                'output' => $value
-            ];
+            /*
+             * Submit final result.
+             */
+
+            requestServer([
+
+                'action' =>
+                    'result',
+
+                'worker_id' =>
+                    $workerId,
+
+                'worker_token' =>
+                    $workerToken,
+
+                'task_id' =>
+                    $taskId,
+
+                'result' => [
+
+                    'success' =>
+                        true,
+
+                    'duration_seconds' =>
+                        $duration,
+
+                    'data' =>
+                        $result
+                ]
+            ]);
+
+
+            echo
+                "Task " .
+                $taskId .
+                " completed.\n";
         }
 
 
-        else {
+        catch (Throwable $e) {
 
-            $result = [
-                'error' =>
-                    'Unknown task type'
-            ];
+            /*
+             * Report failure to the server.
+             */
+
+            requestServer([
+
+                'action' =>
+                    'result',
+
+                'worker_id' =>
+                    $workerId,
+
+                'worker_token' =>
+                    $workerToken,
+
+                'task_id' =>
+                    $taskId,
+
+                'result' => [
+
+                    'success' =>
+                        false,
+
+                    'error' =>
+                        $e->getMessage()
+                ]
+            ]);
+
+
+            echo
+                "Task " .
+                $taskId .
+                " failed: " .
+                $e->getMessage() .
+                "\n";
         }
 
 
-        // ====================================================
-        // SEND RESULT
-        // ====================================================
-
-        requestServer([
-
-            'action' => 'result',
-
-            'worker_id' => $workerId,
-
-            'worker_token' => $workerToken,
-
-            'task_id' => $taskId,
-
-            'result' => $result
-        ]);
+    }
 
 
-        echo "Task completed: " .
-            $taskId .
-            "\n";
-
-
-    } catch (Throwable $e) {
+    catch (Throwable $e) {
 
         /*
-         * Don't immediately kill the worker if the VPS
-         * temporarily becomes unavailable.
+         * Network failure, server failure, etc.
+         *
+         * Don't kill the worker.
          */
 
-        echo "Worker error: " .
+        echo
+            "Worker communication error: " .
             $e->getMessage() .
             "\n";
-
-        echo "Retrying...\n";
 
         sleep(5);
     }
