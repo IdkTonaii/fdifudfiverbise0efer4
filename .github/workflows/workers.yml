@@ -1,4 +1,4 @@
-name: Test Workers
+name: PHP Test
 
 on:
   workflow_dispatch:
@@ -18,33 +18,36 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download worker code
+      - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Check PHP
+      - name: PHP diagnostics
         run: |
-          echo "=== PHP VERSION ==="
+          echo "===== PHP ====="
+          which php
           php --version
 
-          echo "=== CURL ==="
-          php -r "var_dump(function_exists('curl_init'));"
+          echo "===== CURL ====="
+          php -r 'var_dump(function_exists("curl_init"));'
 
-          echo "=== PHP MODULES ==="
-          php -m
+          echo "===== FILE ====="
+          ls -la
+          echo "===== WORKER ====="
+          ls -l worker.php
 
-      - name: Test VPS connection
+      - name: Run worker with error capture
+        continue-on-error: true
         run: |
-          echo "=== TESTING VPS ==="
-          curl -v \
-            --connect-timeout 10 \
-            --max-time 20 \
-            http://34.63.222.47/connectWorker67.php \
-            || true
+          echo "===== RUNNING WORKER ====="
 
-      - name: Run worker
-        run: |
-          echo "=== STARTING WORKER ==="
-          php -d display_errors=1 \
-             -d display_startup_errors=1 \
-             -d error_reporting=E_ALL \
-             worker.php
+          php \
+            -d display_errors=1 \
+            -d display_startup_errors=1 \
+            -d error_reporting=E_ALL \
+            worker.php 2>&1
+
+          CODE=$?
+
+          echo "===== PHP EXIT CODE: $CODE ====="
+
+          exit 0
