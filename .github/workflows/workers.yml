@@ -19,14 +19,32 @@ jobs:
 
     steps:
       - name: Download worker code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Check PHP
         run: |
+          echo "=== PHP VERSION ==="
           php --version
-          php -m
+
+          echo "=== CURL ==="
           php -r "var_dump(function_exists('curl_init'));"
+
+          echo "=== PHP MODULES ==="
+          php -m
+
+      - name: Test VPS connection
+        run: |
+          echo "=== TESTING VPS ==="
+          curl -v \
+            --connect-timeout 10 \
+            --max-time 20 \
+            http://34.63.222.47/connectWorker67.php \
+            || true
 
       - name: Run worker
         run: |
-          php -d display_errors=1 -d error_reporting=E_ALL worker.php
+          echo "=== STARTING WORKER ==="
+          php -d display_errors=1 \
+             -d display_startup_errors=1 \
+             -d error_reporting=E_ALL \
+             worker.php
