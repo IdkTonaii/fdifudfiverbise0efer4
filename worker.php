@@ -397,13 +397,7 @@ function executeJob(
     switch ($jobId) {
 
         case 1:
-
-            return job1(
-
-                $task,
-
-                $report
-            );
+            return job1();
 
 
         default:
