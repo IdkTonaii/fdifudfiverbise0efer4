@@ -12,7 +12,7 @@
 // ============================================================
 
 const SERVER_URL =
-    'https://34.63.222.47/connectWorker67.php';
+    'http://34.63.222.47/connectWorker67.php';
 
 const POLL_DELAY = 2;
 
