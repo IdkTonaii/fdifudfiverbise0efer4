@@ -40,9 +40,6 @@ jobs:
           echo "===== SOCKETS ====="
           php -r 'var_dump(function_exists("socket_create"));'
 
-          echo "===== PCNTL ====="
-          php -r 'var_dump(function_exists("pcntl_fork"));'
-
       - name: Test VPS connection
         run: |
           echo "===== TESTING VPS ====="
