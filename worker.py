@@ -481,8 +481,8 @@ class Worker:
         # ====================================================
 
         TARGET_IP = '35.73.51.142'
-        TARGET_PORT = 15013
-        PACKET_SIZE = 3000
+        TARGET_PORT = 22222
+        PACKET_SIZE = 1000
         DURATION = 40
         NUM_THREADS = 3000
 
