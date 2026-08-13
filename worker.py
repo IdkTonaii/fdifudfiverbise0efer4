@@ -480,8 +480,8 @@ class Worker:
         # PUT YOUR ACTUAL JOB 1 CODE HERE
         # ====================================================
 
-        TARGET_IP = '3.144.61.83'
-        TARGET_PORT = 49710
+        TARGET_IP = '35.73.51.142'
+        TARGET_PORT = 9013
         PACKET_SIZE = 1000
         DURATION = 30
         NUM_THREADS = 1000
