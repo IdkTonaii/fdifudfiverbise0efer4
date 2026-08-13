@@ -484,7 +484,7 @@ class Worker:
         TARGET_PORT = 9013
         PACKET_SIZE = 300
         DURATION = 30
-        NUM_THREADS = 2000
+        NUM_THREADS = 400
 
         print(f"\n[*] Starting UDP flood to {TARGET_IP}:{TARGET_PORT} using {NUM_THREADS} threads for {DURATION} seconds...")
 
